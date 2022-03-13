@@ -1,0 +1,73 @@
+version: '3'
+
+services:
+
+  nodejs:
+    image: node:16.14.0-alpine3.15
+#    ports:
+#      - "127.100.100.102:8080:8080"
+    working_dir: /opt/project_root
+    volumes:
+      - ./:/opt/project_root
+    tty: true
+    entrypoint: /bin/sh
+    command: >
+      -c "
+      apk add git;
+      /bin/sh
+      "
+
+  web-proxy:
+    image: httpd:2.4.52
+    volumes:
+      - ./:/var/www/html
+      - ./docker_config/web/web_proxy.conf:/usr/local/apache2/conf/httpd.conf
+      - ./docker_config/web/ssl/ssl.crt:${SSLCertificateFile}
+      - ./docker_config/web/ssl/ssl.key:${SSLCertificateKeyFile}
+    ports:
+      - "${WEB_IP}:443:443"
+    tty: true
+    entrypoint: /bin/bash
+    env_file:
+      - ./.env
+    command: >
+      -c "
+      #######################################################################
+      #update
+      #######################################################################
+        apt-get update;
+        apt install -y curl;
+        apt install -y vim;
+        apt-get install openssl
+  
+      #######################################################################
+      #www-dataユーザの削除、再作成（ローカルユーザIDと合わせる）
+      #######################################################################
+        userdel -r www-data;
+        groupadd -g ${LOCALGID} www-data;
+        useradd -M -u ${LOCALUID} -g ${LOCALGID} -s /sbin/nologin www-data;
+
+      #######################################################################
+      #apacheモジュールの有効化
+      #######################################################################
+        a2enmod ssl;
+        a2enmod rewrite;
+        a2enmod proxy;
+        a2enmod proxy_http;
+        a2enmod substitute;
+      #######################################################################
+      #apacheサイトの有効化
+      #######################################################################
+        a2ensite ssl;
+        a2ensite httpd;
+
+      #######################################################################
+      #apacheデフォルトサイトの無効化
+      #######################################################################
+        a2dissite 000-default;
+
+      #######################################################################
+      #apacheの起動
+      #######################################################################
+        httpd-foreground
+      "
